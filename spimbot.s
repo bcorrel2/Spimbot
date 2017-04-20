@@ -2,7 +2,7 @@
 PRINT_STRING = 4
 PRINT_CHAR   = 11
 PRINT_INT    = 1
-# test
+
 # debug constants
 PRINT_INT_ADDR   = 0xffff0080
 PRINT_FLOAT_ADDR = 0xffff0084
@@ -55,4 +55,84 @@ REQUEST_PUZZLE_ACK      = 0xffff00d8
 main:
     # go wild
     # the world is your oyster :)
+
+    # $s0 - playpen_x
+    # $s1 - playpen_y
+    # $s2 - playpen_enemy_x
+    # $s3 - playpen_enemy_y
+
+    # Friendly Playpen
+    lw $s0, PLAYPEN_LOCATION
+    lw $s1, PLAYPEN_LOCATION
+
+    and $s0, $s0, 0xFFFF0000
+    and $s1, $s1, 0x0000FFFF
+
+    sra $s1, $s1, 16
+
+    # Enemy Playpen
+    lw $s2, PLAYPEN_OTHER_LOCATION
+    lw $s3, PLAYPEN_OTHER_LOCATION
+
+    and $s2, $s2, 0xFFFF0000
+    and $s3, $s3, 0x0000FFFF
+
+    sra $s3, $s3, 16
+
+    # $t1: target_x
+    # $t2: bot_x
+    # $t3: target_y
+    # $t4: bot_y
+
+   # # # # # # # # # # #
+   
+   # @param: if on friendly playpen, place bunny.
+   # else, if on enemy playpen, sabotage. 
+
+   # # # # # # # # # # #
+
+   j friendly_start
+
+   friendly_start:
+    	beq $t2, $s0, playpen_if
+   	j enemy_start
+
+   playpen_if:
+	beq $t4, $s1, place_bunny
+	j enemy_start
+
+   enemy_start:
+	beq $t2, $s2, enemy_playpen_if
+	j main
+
+   enemy_playpen_if:
+	beq $t4, $s3, sabotage
+	j main 
+
+    # # # # # # # # # # #
+
+    to_playpen:
+	# @param: Set target to friendly playpen.
+        move $t1, $s0
+	move $t3, $s1
+
+
+    place_bunny:
+	# @param: determine number of bunnies carried.
+	# unlock playpen, place bunnies, lock playpen. 
+	lw $v0, NUM_BUNNIES_CARRIED
+	sw $v0, UNLOCK_PLAYPEN
+	sw $v0, PUT_BUNNIES_IN_PLAYPEN
+	sw $v0, LOCK_PLAYPEN
+
+    to_sabotage:
+	# @param: Set target to enemy playpen.
+	move $t1, $s2
+	move $t3, $s3
+	
+    sabotage:
+	# @param: unlock enemy playpen
+	lw $v0, UNLOCK_PLAYPEN
+	
     j   main
+
