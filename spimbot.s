@@ -91,6 +91,8 @@ main:
 
    # # # # # # # # # # #
 
+   lw $t1, BOT_X
+   lw $t2, BOT_Y
    j friendly_start
 
    friendly_start:
