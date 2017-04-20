@@ -12,7 +12,7 @@ F180:	.float  180.0
 # $a1 - y
 # returns the arctangent
 # -----------------------------------------------------------------------
-
+.globl sb_arctan
 sb_arctan:
 	li	$v0, 0		# angle = 0;
 
@@ -70,6 +70,7 @@ pos_x:
 # returns the distance
 # -----------------------------------------------------------------------
 
+.globl euclidean_dist
 euclidean_dist:
 	mul	$a0, $a0, $a0	# x^2
 	mul	$a1, $a1, $a1	# y^2
@@ -110,7 +111,7 @@ answers:
 PRINT_INT = 0xffff0080
 
 .text
-main:
+main2:
 	sub	$sp, $sp, 4
 	sw	$ra, 0($sp)		# save return address on stack
 
