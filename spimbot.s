@@ -49,7 +49,7 @@ REQUEST_PUZZLE_INT_MASK = 0x800
 REQUEST_PUZZLE_ACK      = 0xffff00d8
 
 .data
-#data things go here
+# data things go here
 .align 2
 bunnies_data: .space 484
 
