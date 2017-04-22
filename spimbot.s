@@ -51,10 +51,69 @@ REQUEST_PUZZLE_ACK      = 0xffff00d8
 .data
 # data things go here
 
-.text_ben
-main_ben:
+.text
+main:
     # go wild
     # the world is your oyster :)
+#----Chase Code---#
+la	$t0, bunnies_data
+	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after jal if necessary	
+moving:
+	lw	$t2, BOT_X				#get bot x
+	lw	$t4, BOT_Y				#get bot y
+	lw	$t1, 4($t0)				#first bunny x
+	lw	$t3, 8($t0)				#first bunny y
+	sub	$t1, $t1, $t2			#get x diff
+	sub	$t3, $t3, $t4			#get y diff
+	#jal	euclidean_dist			#find euclidian distance
+	#move $t5, $v0				#store euc dist
+	#la	$t0, bunnies_data		#retrieve bunny data
+	#move $t6, $t0				#current best mem addr
+	#li	$t9, 1					#i = 0 for loop
+	bne	$t1, $0, control		#go to control if x coords are diff
+	bne	$t3, $0, control		#same for y
+	j	catch					#catch the bunny
+#closest:
+	#bge	$t9, 20, control		#for loop to find closest bunny
+	#mul	$t8, $t9, 16			#get bunny offset
+	#add	$t8, $t8, $t0			#get mem addr
+	#add	$t7, $t8, 4				#get x offset		
+	#lw	$t1, 0($t7)				#get bunny x
+	#lw	$t3, 4($t7)				#get bunny y
+	#sub	$t1, $t1, $t2			#get x diff
+	#sub	$t3, $t3, $t4			#get y diff
+	#move $a0, $t1				#arg0 = x diff
+	#move $a1, $t3				#arg1 = y diff
+	#jal	euclidean_dist			#find euclidian distance
+	#la	$t0, bunnies_data		#retrieve bunny data
+	#add	$t9, $t9, 1				#increment i
+	#ble	$t5, $v0, closest		#keep looping if euclid of new is greater than best
+	#move $t5, $v0				#update best euc
+	#move $t6, $t8				#update best mem addr
+	#j	closest
+control:
+	move $a0, $t1				#arg0 = x diff
+	move $a1, $t3				#arg1 = y diff
+	#beq	$t5, $0, catch			#catch bunny since bot is on it
+	#lw	$t1, 4($t8)				#get bunny x
+	#lw	$t3, 8($t8)				#get bunny y
+	#sub	$t1, $t1, $t2			#get x diff
+	#sub	$t3, $t3, $t4			#get y diff
+	#move $a0, $t1				#arg 0 is x diff
+	#move $a1, $t3				#arg 1 is y diff
+	jal	sb_arctan				#find angle
+	sw	$v0, ANGLE				#set angle
+	li	$t1, 1					#absolute direction
+	sw	$t1, ANGLE_CONTROL		#change angle control	
+	li	$t3, 10					#set speed
+	sw	$t3, VELOCITY			#change speed
+	la	$t0, bunnies_data		#retrieve bunny address
+	j	moving					#continue until bunny found
+catch:		
+	li	$t5, 0						#gonna catch a bunny
+	sw	$t5, CATCH_BUNNY			#call catch bunny
+	j	main
+#----End Chase Code---#
 
     # $s0 - playpen_x
     # $s1 - playpen_y
