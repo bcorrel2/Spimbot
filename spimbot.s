@@ -51,8 +51,8 @@ REQUEST_PUZZLE_ACK      = 0xffff00d8
 .data
 # data things go here
 
-.text
-main:
+.text_ben
+main_ben:
     # go wild
     # the world is your oyster :)
 
