@@ -60,10 +60,42 @@ main:
 moving:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
-	lw	$t1, 4($t0)				#first bunny x
-	lw	$t3, 8($t0)				#first bunny y
-	sub	$t1, $t1, $t2			#get x diff
-	sub	$t3, $t3, $t4			#get y diff
+	li	$t8, 0					#bunny offset
+	li	$t9, 9000000			#super high value
+	add	$t1, $t0, 4				#bunny x addr
+	add	$t3, $t0, 8				#bunny y addr
+	li	$t0, 0					#curr bunny offset
+closest:
+	bge	$t0, 20, start			#start going to bunny
+	lw	$t5, 0($t1)				#bunny x
+	lw	$t6, 0($t3)				#bunny y
+	sub	$t5, $t5, $t2			#get x diff
+	sra	$t7, $t5, 31			#get signed bit
+	xor	$t5, $t5, $t7			#invert bits
+	sub	$t5, $t5, $t7			#get abs value of x diff
+	sub	$t6, $t6, $t4			#get y diff
+	sra	$t7, $t6, 31			#get signed bit
+	xor	$t6, $t6, $t7			#invert bits
+	sub	$t6, $t6, $t7			#get abs value of y diff
+	move $a0, $t5				#arg 0 = x diff
+	move $a1, $t6				#arg 1 = y diff
+	jal	euclidean_dist			#find euc dist;
+	bge	$v0, $t9, skip			#if euc dist is greater than best, skip it
+	move $t9, $v0				#update best value
+	move $t8, $t0				#bunny offset
+skip:
+	add	$t0, $t0, 1				#increment bunny offset
+	add	$t1, $t1, 16			#next bunny x
+	add	$t3, $t3, 16			#next bunny y
+	j closest					#keep searching
+start:
+	la	$t0, bunnies_data		#retrieve bunny address
+	mul	$t5, $t8, 16			#bunny offset
+	add	$t5, $t5, $t0			#bunny addr
+	lw	$t1, 4($t5)				#closest bunny x
+	lw	$t3, 8($t5)				#closest bunny y
+	sub	$t1, $t1, $t2			#x diff
+	sub	$t3, $t3, $t4			#y diff
 	bne	$t1, $0, control		#go to control if x coords are diff
 	bne	$t3, $0, control		#same for y
 	j	catch					#catch the bunny
@@ -79,6 +111,6 @@ control:
 	la	$t0, bunnies_data		#retrieve bunny address
 	j	moving					#continue until bunny found
 catch:		
-	li	$t5, 0						#gonna catch a bunny
-	sw	$t5, CATCH_BUNNY			#call catch bunny
+	li	$t5, 0					#gonna catch a bunny
+	sw	$t5, CATCH_BUNNY		#call catch bunny
 	j	main
