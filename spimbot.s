@@ -50,20 +50,14 @@ REQUEST_PUZZLE_ACK      = 0xffff00d8
 
 .data
 # data things go here
+.align 2
+bunnies_data: .space 484
+puzzle_data: .space 9804
+.baskets_data: .space 44
 
 .text
 main:
-    # go wild
-    # the world is your oyster :)
-
-#---Playpen Locations---#
-
-    # $s0 - playpen_x
-    # $s1 - playpen_y
-    # $s2 - playpen_enemy_x
-    # $s3 - playpen_enemy_y
-
-    # Friendly Playpen
+	# Friendly Playpen
     lw $s0, PLAYPEN_LOCATION
     lw $s1, PLAYPEN_LOCATION
 
@@ -71,7 +65,7 @@ main:
     and $s1, $s1, 0x0000FFFF
 
     sra $s1, $s1, 16
-
+    
     # Enemy Playpen
     lw $s2, PLAYPEN_OTHER_LOCATION
     lw $s3, PLAYPEN_OTHER_LOCATION
@@ -81,63 +75,75 @@ main:
 
     sra $s3, $s3, 16
     
-#-----------------------#
+	# enable interrupts
+	li	$t4, TIMER_MASK		# timer interrupt enable bit
+	or	$t4, $t4, BONK_MASK	# bonk interrupt bit
+	or	$t4, $t4, PLAYPEN_UNLOCK_INT_MASK	#playpen opened
+	or	$t4, $t4, REQUEST_PUZZLE_INT_MASK	#puzzle ready
+	or	$t4, $t4, 1				#global
+	mtc0	$t4, $12			# set interrupt mask (Status register)
 
-    # $t1: target_x
-    # $t2: bot_x
-    # $t3: target_y
-    # $t4: bot_y
-  
-#----Chase-Code---#
+	# request timer interrupt
+	lw	$t0, TIMER				# read current time
+	add	$t0, $t0, 50			# add 50 to current time
+	sw	$t0, TIMER				# request timer interrupt in 50 cycles
 
-	la	$t0, bunnies_data
-	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after jal if necessary	
+beginning:
+	lw	$t0, NUM_CARROTS		#get carrots
+	bge	$t0, 5, next			#only request a puzzle if carrots is less than 5
+	la	$t0, puzzle_data		#request a puzzle
+	sw	$t0, REQUEST_PUZZLE		# ^^
+next:	
+    la	$t0, bunnies_data
+	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after maal if necessary
 
+	lw	$t9, NUM_BUNNIES_CARRIED #get bunnies carried
+	bge	$t9, 7, deposit			#deposit bunnies in pen
 moving:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
-	lw	$t1, 4($t0)				#first bunny x
-	lw	$t3, 8($t0)				#first bunny y
-	sub	$t1, $t1, $t2			#get x diff
-	sub	$t3, $t3, $t4			#get y diff
-	#jal	euclidean_dist			#find euclidian distance
-	#move $t5, $v0				#store euc dist
-	#la	$t0, bunnies_data		#retrieve bunny data
-	#move $t6, $t0				#current best mem addr
-	#li	$t9, 1					#i = 0 for loop
+	li	$t8, 0					#bunny offset
+	li	$t9, 9000000			#super high value
+	add	$t1, $t0, 4				#bunny x addr
+	add	$t3, $t0, 8				#bunny y addr
+	li	$t0, 0					#curr bunny offset
+closest:
+	bge	$t0, 20, start			#start going to bunny
+	lw	$t5, 0($t1)				#bunny x
+	lw	$t6, 0($t3)				#bunny y
+	sub	$t5, $t5, $t2			#get x diff
+	sra	$t7, $t5, 31			#get signed bit
+	xor	$t5, $t5, $t7			#invert bits
+	sub	$t5, $t5, $t7			#get abs value of x diff
+	sub	$t6, $t6, $t4			#get y diff
+	sra	$t7, $t6, 31			#get signed bit
+	xor	$t6, $t6, $t7			#invert bits
+	sub	$t6, $t6, $t7			#get abs value of y diff
+	move $a0, $t5				#arg 0 = x diff
+	move $a1, $t6				#arg 1 = y diff
+	jal	euclidean_dist			#find euc dist
+	bge	$v0, $t9, skip			#if euc dist is greater than best, skip it
+	move $t9, $v0				#update best value
+	move $t8, $t0				#bunny offset
+skip:
+	add	$t0, $t0, 1				#increment bunny offset
+	add	$t1, $t1, 16			#next bunny x
+	add	$t3, $t3, 16			#next bunny y
+	j closest					#keep searching
+start:
+	la	$t0, bunnies_data		#retrieve bunny address
+	mul	$t5, $t8, 16			#bunny offset
+	add	$t5, $t5, $t0			#bunny addr
+	lw	$t1, 4($t5)				#closest bunny x
+	lw	$t3, 8($t5)				#closest bunny y
+	sub	$t1, $t1, $t2			#x diff
+	sub	$t3, $t3, $t4			#y diff
 	bne	$t1, $0, control		#go to control if x coords are diff
 	bne	$t3, $0, control		#same for y
 	j	catch					#catch the bunny
-	
-#closest:
-	#bge	$t9, 20, control		#for loop to find closest bunny
-	#mul	$t8, $t9, 16			#get bunny offset
-	#add	$t8, $t8, $t0			#get mem addr
-	#add	$t7, $t8, 4				#get x offset		
-	#lw	$t1, 0($t7)				#get bunny x
-	#lw	$t3, 4($t7)				#get bunny y
-	#sub	$t1, $t1, $t2			#get x diff
-	#sub	$t3, $t3, $t4			#get y diff
-	#move $a0, $t1				#arg0 = x diff
-	#move $a1, $t3				#arg1 = y diff
-	#jal	euclidean_dist			#find euclidian distance
-	#la	$t0, bunnies_data		#retrieve bunny data
-	#add	$t9, $t9, 1				#increment i
-	#ble	$t5, $v0, closest		#keep looping if euclid of new is greater than best
-	#move $t5, $v0				#update best euc
-	#move $t6, $t8				#update best mem addr
-	#j	closest
-	
 control:
 	move $a0, $t1				#arg0 = x diff
 	move $a1, $t3				#arg1 = y diff
-	#beq	$t5, $0, catch			#catch bunny since bot is on it
-	#lw	$t1, 4($t8)				#get bunny x
-	#lw	$t3, 8($t8)				#get bunny y
-	#sub	$t1, $t1, $t2			#get x diff
-	#sub	$t3, $t3, $t4			#get y diff
-	#move $a0, $t1				#arg 0 is x diff
-	#move $a1, $t3				#arg 1 is y diff
 	jal	sb_arctan				#find angle
 	sw	$v0, ANGLE				#set angle
 	li	$t1, 1					#absolute direction
@@ -146,61 +152,45 @@ control:
 	sw	$t3, VELOCITY			#change speed
 	la	$t0, bunnies_data		#retrieve bunny address
 	j	moving					#continue until bunny found
-	
 catch:		
-	li	$t5, 0						#gonna catch a bunny
-	sw	$t5, CATCH_BUNNY			#call catch bunny
-	j	main
+	li	$t5, 0					#gonna catch a bunny
+	sw	$t5, CATCH_BUNNY		#call catch bunny
+	j	beginning
+deposit:
+	lw	$t5, PLAYPEN_LOCATION	#load location
+	srl	$t1, $t5, 16			#get x loc
+	and	$t3, $t5, 0x0000ffff	#get y loc
+	lw	$t2, BOT_X				#get bot x
+	lw	$t4, BOT_Y				#get bot y
+	sub	$t1, $t1, $t2			#x diff
+	sub	$t3, $t3, $t4			#y diff
+	bne	$t1, $0, move_to_pen	#check if at pen x
+	bne	$t3, $0, move_to_pen	#check if at pen y
+	j	give_bunnies
+move_to_pen:
+	move $a0, $t1				#arg0 = x diff
+	move $a1, $t3				#arg1 = y diff
+	jal	sb_arctan				#find angle
+	sw	$v0, ANGLE				#set angle
+	li	$t1, 1					#absolute direction
+	sw	$t1, ANGLE_CONTROL		#change angle control	
+	li	$t3, 10					#set speed
+	sw	$t3, VELOCITY			#change speed
+	j	deposit					#keep depositing
+give_bunnies:
+	li	$t1, 1					#deposit
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	sw 	$v0, LOCK_PLAYPEN
+	j	beginning
 	
-#-----------------#
-
-#---Ben-Code---#  
-
-	# Temp Code #
-   friendly_start:
-    	beq $t2, $s0, playpen_if
-   	j enemy_start
+#--------------------------------------------------------------------- Interrupt handlers	
 	
-   playpen_if:
-	beq $t4, $s1, place_bunny
-	j enemy_start
-
-   enemy_start:
-	beq $t2, $s2, enemy_playpen_if
-	j main
-
-   enemy_playpen_if:
-	beq $t4, $s3, sabotage
-	j main 
-
-	# Real Code #
-    to_playpen:
-	# @param: Set target to friendly playpen.
-        move $t1, $s0
-	move $t3, $s1
-
-
-    place_bunny:
-	# @param: determine number of bunnies carried.
-	# unlock playpen, place bunnies, lock playpen. 
-	lw $v0, NUM_BUNNIES_CARRIED
-	sw $v0, UNLOCK_PLAYPEN
-	sw $v0, PUT_BUNNIES_IN_PLAYPEN
-	sw $v0, LOCK_PLAYPEN
-
-    to_sabotage:
-	# @param: Set target to enemy playpen.
-	move $t1, $s2
-	move $t3, $s3
-	
-    sabotage:
-	# @param: unlock enemy playpen
-	lw $v0, UNLOCK_PLAYPEN
-#-----------#
-	
-    j   main
-
-
 .kdata				# interrupt handler data (separated just for readability)
 chunkIH:	.space 8	# space for two registers
 non_intrpt_str:	.asciiz "Non-interrupt exception\n"
@@ -225,29 +215,45 @@ interrupt_dispatch:			# Interrupt:
 	mfc0	$k0, $13		# Get Cause register, again                 
 	beq	$k0, 0, done		# handled all outstanding interrupts     
 
-	and	$a0, $k0, BONK_MASK	 # is there a bonk interrupt?                
+	and	$a0, $k0, BONK_MASK	# is there a bonk interrupt?                
 	bne	$a0, 0, bonk_interrupt   
 
-	and	$a0, $k0, TIMER_MASK # is there a timer interrupt?
+	and	$a0, $k0, TIMER_MASK	# is there a timer interrupt?
 	bne	$a0, 0, timer_interrupt
 
 	# add dispatch for other interrupt types here.
-	and     $a0, $k0, PLAYPEN_UNLOCK_INT_MASK
-	bne     $a0, 0, unlock_interrupt
 	
+	and	$a0, $k0, PLAYPEN_UNLOCK_INT_MASK	# is there a playpen unlocked interrupt?
+	bne	$a0, 0, unlock_interrupt
+	
+	and	$a0, $k0, REQUEST_PUZZLE_INT_MASK	# is there a puzzle request interrupt?
+	bne	$a0, 0, puzzle_interrupt
+
 	li	$v0, PRINT_STRING	# Unhandled interrupt types
 	la	$a0, unhandled_str
 	syscall 
 	j	done
 
 unlock_interrupt:
+	sw  	$a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
+	move	$t1, $s0
+	move	$t3, $s1
 
-      sw      $a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
-              # load playpen as target
-	      move $t1, $s0
-	      move $t3, $s1
-
-      j       interrupt_dispatch       # see if other interrupts are waiting
+	j 	interrupt_dispatch
+	
+puzzle_interrupt:
+	sw	$a1, REQUEST_PUZZLE_ACK
+	#li	$a0, 10							#max baskets = 10
+	#la	$a1, REQUEST_PUZZLE				#k = last word of puzzle
+	#lw	$a1, 9800($a1)					#get k
+	#la	$a2, REQUEST_PUZZLE				#root node addr
+	#lw	$a2, 0($a2)						#root node
+	#sw	$0, 0($v0)						#store 0 for num_found
+	#lw	$a3, 0($v0)						#get baskets
+	#jal	search_carrots
+	#sw	$v0, 0($v0)						#store to mem
+	#sw	$v0, SUBMIT_SOLUTION			#submit solution
+	j	interrupt_dispatch
 
 bonk_interrupt:
       sw      $a1, 0xffff0060($zero)   # acknowledge interrupt
@@ -257,17 +263,36 @@ bonk_interrupt:
       and     $a0, $a0, 1              # does
       bne     $a0, $zero, bonk_skip    # this 
       li      $a1, -10                 # code
+      
 bonk_skip:                             #  do 
       sw      $a1, 0xffff0010($zero)   #  ??  
 
       j       interrupt_dispatch       # see if other interrupts are waiting
-      
+
 timer_interrupt:
 	sw	$a1, TIMER_ACK		# acknowledge interrupt
 
-	li	$t0, 90			# ???
-	sw	$t0, ANGLE		# ???
+	li	$t8, 90			# ???
+	sw	$t8, ANGLE		# ???
 	sw	$zero, ANGLE_CONTROL	# ???
 
 	lw	$v0, TIMER		# current time
 	add	$v0, $v0, 50000  
+	sw	$v0, TIMER		# request timer in 50000 cycles
+
+	j	interrupt_dispatch	# see if other interrupts are waiting
+      
+non_intrpt:				# was some non-interrupt
+	li	$v0, PRINT_STRING
+	la	$a0, non_intrpt_str
+	syscall				# print out an error message
+	# fall through to done
+
+done:
+	la	$k0, chunkIH
+	lw	$a0, 0($k0)		# Restore saved registers
+	lw	$a1, 4($k0)
+.set noat
+	move	$at, $k1		# Restore $at
+.set at 
+	eret
