@@ -189,6 +189,15 @@ give_bunnies:
 	sw 	$v0, LOCK_PLAYPEN
 	j	beginning
 	
+ to_sabotage:
+	# @param: Set target to enemy playpen.
+	move $t1, $s2
+	move $t3, $s3
+	
+ sabotage:
+	# @param: unlock enemy playpen
+	lw $v0, UNLOCK_PLAYPEN
+	
 #--------------------------------------------------------------------- Interrupt handlers	
 	
 .kdata				# interrupt handler data (separated just for readability)
