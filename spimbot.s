@@ -53,10 +53,12 @@ REQUEST_PUZZLE_ACK      = 0xffff00d8
 .align 2
 bunnies_data: .space 484
 puzzle_data: .space 9804
-.baskets_data: .space 44
+baskets_data: .space 44
+puzzlesolution:	.space 4
 
 .text
 main:
+	li	$v1, 0			#carrot flag false
 	# Friendly Playpen
     lw $s0, PLAYPEN_LOCATION
     lw $s1, PLAYPEN_LOCATION
@@ -64,7 +66,7 @@ main:
     and $s0, $s0, 0xFFFF0000
     and $s1, $s1, 0x0000FFFF
 
-    sra $s1, $s1, 16
+    sra $s0, $s0, 16
     
     # Enemy Playpen
     lw $s2, PLAYPEN_OTHER_LOCATION
@@ -73,7 +75,9 @@ main:
     and $s2, $s2, 0xFFFF0000
     and $s3, $s3, 0x0000FFFF
 
-    sra $s3, $s3, 16
+    sra $s2, $s2, 16
+
+	lw	$s4, TIMER		#get timer
     
 	# enable interrupts
 	li	$t4, TIMER_MASK		# timer interrupt enable bit
@@ -90,18 +94,52 @@ main:
 
 beginning:
 	lw	$t0, NUM_CARROTS		#get carrots
-	bge	$t0, 5, next			#only request a puzzle if carrots is less than 5
+	bge	$t0, 10, next			#only request a puzzle if carrots is less than 10
 	la	$t0, puzzle_data		#request a puzzle
 	sw	$t0, REQUEST_PUZZLE		# ^^
 next:	
     la	$t0, bunnies_data
-	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after maal if necessary
+	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after jal if necessary
 
 	lw	$t9, NUM_BUNNIES_CARRIED #get bunnies carried
 	bge	$t9, 7, deposit			#deposit bunnies in pen
 moving:
+	beq	$v1, 0, skip_puzzle		#skip puzzle if not ready
+	li	$a0, 10					#max baskets = 10
+	la	$a1, puzzle_data
+	lw	$a1, 9800($a1)			#get k
+	lw	$a2, puzzle_data		#root node
+	la	$v0, baskets_data
+	sw	$0, 0($v0)				#store 0 for num_found
+	lw	$a3, baskets_data		#get baskets
+	jal	search_carrot
+	sw	$v0, puzzlesolution		#store to mem
+	la	$v0, puzzlesolution
+	sw	$v0, SUBMIT_SOLUTION	#submit solution
+	la	$t0, bunnies_data		#retrieve bunny data
+	
+skip_puzzle:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
+	lw	$t8, TIMER				#current time
+	sub	$t8, $t8, $s4			#get time since sabotage
+	ble	$t8, 1000000, continue_bunnies	#don't sabotage if too soon
+
+	sub	$t8, $t2, $s2			#x diff from enemy pen
+	sra	$t7, $t8, 31			#get signed bit
+	xor	$t8, $t8, $t7			#invert bits
+	sub	$t8, $t8, $t7			#get abs value of x diff
+	sub	$t9, $t4, $s3			#y diff from enemy pen
+	sra	$t7, $t9, 31			#get signed bit
+	xor	$t9, $t9, $t7			#invert bits
+	sub	$t9, $t9, $t7			#get abs value of y diff
+	move $a0, $t8				#arg 0 = x diff
+	move $a1, $t9				#arg 1 = y diff
+	jal	euclidean_dist			#find euc dist
+	ble	$v0, 150, sabotage		#go sabotage
+
+continue_bunnies:
+	la	$t0, bunnies_data		#could be messed up from sb_arc
 	li	$t8, 0					#bunny offset
 	li	$t9, 9000000			#super high value
 	add	$t1, $t0, 4				#bunny x addr
@@ -178,16 +216,30 @@ move_to_pen:
 	sw	$t3, VELOCITY			#change speed
 	j	deposit					#keep depositing
 give_bunnies:
-	li	$t1, 1					#deposit
-	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
-	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
-	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
-	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
-	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
-	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
+	li	$t1, 7					#deposit
 	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
 	sw 	$v0, LOCK_PLAYPEN
 	j	beginning
+sabotage:
+	lw	$t2, BOT_X				#get bot x
+	lw	$t4, BOT_Y				#get bot y
+	sub	$t8, $s2, $t2			#x diff from enemy pen
+	sub	$t9, $s3, $t4			#y diff from enemy pen
+	beq	$t8, $0, open_pen		#x are the same
+	beq	$t9, $0, open_pen		#y are the same
+	move $a0, $t8				#x diff
+	move $a1, $t9				#y diff
+	jal	sb_arctan				#get angle
+	sw	$v0, ANGLE				#set angle
+	li	$t1, 1					#absolute direction
+	sw	$t1, ANGLE_CONTROL		#change angle control	
+	li	$t3, 10					#set speed
+	sw	$t3, VELOCITY			#change speed
+	j 	sabotage
+open_pen:
+	sw	$v0, UNLOCK_PLAYPEN		#unlock pen
+	lw	$s4, TIMER				#log time unlocked
+	j 	beginning
 	
 #--------------------------------------------------------------------- Interrupt handlers	
 	
@@ -243,16 +295,7 @@ unlock_interrupt:
 	
 puzzle_interrupt:
 	sw	$a1, REQUEST_PUZZLE_ACK
-	#li	$a0, 10							#max baskets = 10
-	#la	$a1, REQUEST_PUZZLE				#k = last word of puzzle
-	#lw	$a1, 9800($a1)					#get k
-	#la	$a2, REQUEST_PUZZLE				#root node addr
-	#lw	$a2, 0($a2)						#root node
-	#sw	$0, 0($v0)						#store 0 for num_found
-	#lw	$a3, 0($v0)						#get baskets
-	#jal	search_carrots
-	#sw	$v0, 0($v0)						#store to mem
-	#sw	$v0, SUBMIT_SOLUTION			#submit solution
+	li	$v1, 1							#flag true
 	j	interrupt_dispatch
 
 bonk_interrupt:
