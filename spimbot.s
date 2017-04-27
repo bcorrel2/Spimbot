@@ -189,15 +189,62 @@ give_bunnies:
 	sw 	$v0, LOCK_PLAYPEN
 	j	beginning
 	
- to_sabotage:
+to_sabotage:
 	# @param: Set target to enemy playpen.
 	move $t1, $s2
 	move $t3, $s3
+	lw      $t2, BOT_X                      #get bot x
+        lw      $t4, BOT_Y                      #get bot y
+        sub     $t1, $t1, $t2                   #x diff
+        sub     $t3, $t3, $t4                   #y diff
+        bne     $t1, $0, move_to_sabotage    #check if at enemy pen x
+        bne     $t3, $0, move_to_sabotage    #check if at enemy pen y
+        j       sabotage
+
+move_to_sabotage:
+	move $a0, $t1                           #arg0 = x diff
+        move $a1, $t3                           #arg1 = y diff
+        jal     sb_arctan                               #find angle
+        sw      $v0, ANGLE                              #set angle
+        li      $t1, 1                                  #absolute direction
+        sw      $t1, ANGLE_CONTROL              #change angle control   
+        li      $t3, 10                                 #set speed
+        sw      $t3, VELOCITY                   #change speed
+        j       to_sabotage   
 	
- sabotage:
+sabotage:
 	# @param: unlock enemy playpen
 	lw $v0, UNLOCK_PLAYPEN
-	
+	j beginning
+
+to_save:
+	move    $t1, $s2
+        move    $t3, $s3
+        lw      $t2, BOT_X          #get bot x
+        lw      $t4, BOT_Y          #get bot y
+        sub     $t1, $t1, $t2       #x diff
+        sub     $t3, $t3, $t4       #y diff
+        bne     $t1, $0, move_to_save    #check if at pen x
+        bne     $t3, $0, move_to_save    #check if at pen y
+        j       save
+
+
+
+
+move_to_save:
+	move $a0, $t1                           #arg0 = x diff
+        move $a1, $t3                           #arg1 = y diff
+        jal     sb_arctan                       #find angle
+        sw      $v0, ANGLE                      #set angle
+        li      $t1, 1                          #absolute direction
+        sw      $t1, ANGLE_CONTROL              #change angle control   
+        li      $t3, 10                         #set speed
+        sw      $t3, VELOCITY                   #change speed
+        j       to_save                         #keep moving
+
+save:
+	sw $v0, LOCK_PLAYPEN			#lock pen
+	j to_sabotage
 #--------------------------------------------------------------------- Interrupt handlers	
 	
 .kdata				# interrupt handler data (separated just for readability)
