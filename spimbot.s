@@ -57,6 +57,9 @@ puzzle_data: .space 9804
 
 .text
 main:
+
+    li $s5, 0 #emergency boolean
+
 	# Friendly Playpen
     lw $s0, PLAYPEN_LOCATION
     lw $s1, PLAYPEN_LOCATION
@@ -89,6 +92,7 @@ main:
 	sw	$t0, TIMER				# request timer interrupt in 50 cycles
 
 beginning:
+	beq	$s5, 1, to_save			#if unlock interrupt, then save pen
 	lw	$t0, NUM_CARROTS		#get carrots
 	bge	$t0, 5, next			#only request a puzzle if carrots is less than 5
 	la	$t0, puzzle_data		#request a puzzle
@@ -191,6 +195,7 @@ give_bunnies:
 	
 to_sabotage:
 	# @param: Set target to enemy playpen.
+	beq  $s5, 1, to_save
 	move $t1, $s2
 	move $t3, $s3
 	lw      $t2, BOT_X                      #get bot x
@@ -244,6 +249,7 @@ move_to_save:
 
 save:
 	sw $v0, LOCK_PLAYPEN			#lock pen
+	li $s5, 0				#emergency boolean
 	j to_sabotage
 #--------------------------------------------------------------------- Interrupt handlers	
 	
@@ -292,8 +298,8 @@ interrupt_dispatch:			# Interrupt:
 
 unlock_interrupt:
 	sw  	$a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
-	move	$t1, $s0
-	move	$t3, $s1
+	
+	li 	$s5, 1 #emergency boolean
 
 	j 	interrupt_dispatch
 	
