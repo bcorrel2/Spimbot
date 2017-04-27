@@ -60,32 +60,27 @@ puzzlesolution:	.space 4
 .text
 main:
 	li	$v1, 0			#carrot flag false
-
-    li $s5, 0 #emergency boolean
+        li      $s5, 0                  #emergency boolean
     
-	# Friendly Playpen
-    lw $s0, PLAYPEN_LOCATION
-    lw $s1, PLAYPEN_LOCATION
+      # Friendly Playpen
+        lw      $s0, PLAYPEN_LOCATION
+        lw      $s1, PLAYPEN_LOCATION
 
-    and $s0, $s0, 0xFFFF0000
-    and $s1, $s1, 0x0000FFFF
+        and     $s0, $s0, 0xFFFF0000
+        and     $s1, $s1, 0x0000FFFF
 
-
-    sra $s0, $s0, 16
-
+        sra     $s0, $s0, 16
     
-    # Enemy Playpen
-    lw $s2, PLAYPEN_OTHER_LOCATION
-    lw $s3, PLAYPEN_OTHER_LOCATION
+      # Enemy Playpen
+        lw      $s2, PLAYPEN_OTHER_LOCATION
+        lw      $s3, PLAYPEN_OTHER_LOCATION
 
-    and $s2, $s2, 0xFFFF0000
-    and $s3, $s3, 0x0000FFFF
+        and     $s2, $s2, 0xFFFF0000
+        and     $s3, $s3, 0x0000FFFF
 
+        sra     $s2, $s2, 16
 
-  sra $s2, $s2, 16
-
-	lw	$s4, TIMER		#get timer
-
+        lw	$s4, TIMER		#get timer
     
 	# enable interrupts
 	li	$t4, TIMER_MASK		# timer interrupt enable bit
@@ -103,19 +98,16 @@ main:
 beginning:
 	lw	$t0, NUM_CARROTS		#get carrots
 	bge	$t0, 10, next			#only request a puzzle if carrots is less than 10
-
 	la	$t0, puzzle_data		#request a puzzle
 	sw	$t0, REQUEST_PUZZLE		# ^^
+
 next:	
-    la	$t0, bunnies_data
-
+        la	$t0, bunnies_data
 	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after jal if necessary
-
-
 	lw	$t9, NUM_BUNNIES_CARRIED #get bunnies carried
 	bge	$t9, 7, deposit			#deposit bunnies in pen
-moving:
 
+moving:
 	beq	$v1, 0, skip_puzzle		#skip puzzle if not ready
 	li	$a0, 10					#max baskets = 10
 	la	$a1, puzzle_data
@@ -136,7 +128,6 @@ skip_puzzle:
 	lw	$t8, TIMER				#current time
 	sub	$t8, $t8, $s4			#get time since sabotage
 	ble	$t8, 1000000, continue_bunnies	#don't sabotage if too soon
-
 	sub	$t8, $t2, $s2			#x diff from enemy pen
 	sra	$t7, $t8, 31			#get signed bit
 	xor	$t8, $t8, $t7			#invert bits
@@ -152,19 +143,18 @@ skip_puzzle:
 
 continue_bunnies:
 	la	$t0, bunnies_data		#could be messed up from sb_arc
-
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
-
 	li	$t8, 0					#bunny offset
 	li	$t9, 9000000			#super high value
 	add	$t1, $t0, 4				#bunny x addr
 	add	$t3, $t0, 8				#bunny y addr
 	li	$t0, 0					#curr bunny offset
+
 closest:
 	bge	$t0, 20, start			#start going to bunny
-	lw	$t5, 0($t1)				#bunny x
-	lw	$t6, 0($t3)				#bunny y
+	lw	$t5, 0($t1)			#bunny x
+	lw	$t6, 0($t3)			#bunny y
 	sub	$t5, $t5, $t2			#get x diff
 	sra	$t7, $t5, 31			#get signed bit
 	xor	$t5, $t5, $t7			#invert bits
@@ -173,114 +163,118 @@ closest:
 	sra	$t7, $t6, 31			#get signed bit
 	xor	$t6, $t6, $t7			#invert bits
 	sub	$t6, $t6, $t7			#get abs value of y diff
-	move $a0, $t5				#arg 0 = x diff
-	move $a1, $t6				#arg 1 = y diff
+	move    $a0, $t5			#arg 0 = x diff
+	move    $a1, $t6		 	#arg 1 = y diff
 	jal	euclidean_dist			#find euc dist
 	bge	$v0, $t9, skip			#if euc dist is greater than best, skip it
 	move $t9, $v0				#update best value
 	move $t8, $t0				#bunny offset
+
 skip:
-	add	$t0, $t0, 1				#increment bunny offset
+	add	$t0, $t0, 1			#increment bunny offset
 	add	$t1, $t1, 16			#next bunny x
 	add	$t3, $t3, 16			#next bunny y
-	j closest					#keep searching
+	j closest				#keep searching
+
 start:
 	la	$t0, bunnies_data		#retrieve bunny address
 	mul	$t5, $t8, 16			#bunny offset
 	add	$t5, $t5, $t0			#bunny addr
-	lw	$t1, 4($t5)				#closest bunny x
-	lw	$t3, 8($t5)				#closest bunny y
+	lw	$t1, 4($t5)			#closest bunny x
+	lw	$t3, 8($t5)			#closest bunny y
 	sub	$t1, $t1, $t2			#x diff
 	sub	$t3, $t3, $t4			#y diff
 	bne	$t1, $0, control		#go to control if x coords are diff
 	bne	$t3, $0, control		#same for y
-	j	catch					#catch the bunny
+	j	catch				#catch the bunny
+
 control:
 	move $a0, $t1				#arg0 = x diff
 	move $a1, $t3				#arg1 = y diff
-	jal	sb_arctan				#find angle
-	sw	$v0, ANGLE				#set angle
-	li	$t1, 1					#absolute direction
+	jal	sb_arctan			#find angle
+	sw	$v0, ANGLE			#set angle
+	li	$t1, 1				#absolute direction
 	sw	$t1, ANGLE_CONTROL		#change angle control	
-	li	$t3, 10					#set speed
+	li	$t3, 10				#set speed
 	sw	$t3, VELOCITY			#change speed
 	la	$t0, bunnies_data		#retrieve bunny address
-	j	moving					#continue until bunny found
+	j	moving				#continue until bunny found
+
 catch:		
-	li	$t5, 0					#gonna catch a bunny
+	li	$t5, 0				#gonna catch a bunny
 	sw	$t5, CATCH_BUNNY		#call catch bunny
 	j	beginning
   
 deposit:
-	lw	$t5, PLAYPEN_LOCATION	#load location
+	lw	$t5, PLAYPEN_LOCATION		#load location
 	srl	$t1, $t5, 16			#get x loc
-	and	$t3, $t5, 0x0000ffff	#get y loc
-	lw	$t2, BOT_X				#get bot x
-	lw	$t4, BOT_Y				#get bot y
+	and	$t3, $t5, 0x0000ffff		#get y loc
+	lw	$t2, BOT_X			#get bot x
+	lw	$t4, BOT_Y			#get bot y
 	sub	$t1, $t1, $t2			#x diff
 	sub	$t3, $t3, $t4			#y diff
-	bne	$t1, $0, move_to_pen	#check if at pen x
-	bne	$t3, $0, move_to_pen	#check if at pen y
+	bne	$t1, $0, move_to_pen		#check if at pen x
+	bne	$t3, $0, move_to_pen		#check if at pen y
 	j	give_bunnies
   
 move_to_pen:
 	move $a0, $t1				#arg0 = x diff
 	move $a1, $t3				#arg1 = y diff
-	jal	sb_arctan				#find angle
-	sw	$v0, ANGLE				#set angle
-	li	$t1, 1					#absolute direction
+	jal	sb_arctan			#find angle
+	sw	$v0, ANGLE			#set angle
+	li	$t1, 1				#absolute direction
 	sw	$t1, ANGLE_CONTROL		#change angle control	
-	li	$t3, 10					#set speed
+	li	$t3, 10				#set speed
 	sw	$t3, VELOCITY			#change speed
-	j	deposit					#keep depositing
+	j	deposit				#keep depositing
   
 give_bunnies:
-	li	$t1, 7					#deposit
+	li	$t1, 7				#deposit
 	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
 	sw 	$v0, LOCK_PLAYPEN
 	j	beginning
   
 sabotage:
-	lw	$t2, BOT_X				#get bot x
-	lw	$t4, BOT_Y				#get bot y
+	lw	$t2, BOT_X			#get bot x
+	lw	$t4, BOT_Y			#get bot y
 	sub	$t8, $s2, $t2			#x diff from enemy pen
 	sub	$t9, $s3, $t4			#y diff from enemy pen
 	beq	$t8, $0, open_pen		#x are the same
 	beq	$t9, $0, open_pen		#y are the same
 	move $a0, $t8				#x diff
 	move $a1, $t9				#y diff
-	jal	sb_arctan				#get angle
-	sw	$v0, ANGLE				#set angle
-	li	$t1, 1					#absolute direction
+	jal	sb_arctan			#get angle
+	sw	$v0, ANGLE			#set angle
+	li	$t1, 1				#absolute direction
 	sw	$t1, ANGLE_CONTROL		#change angle control	
-	li	$t3, 10					#set speed
+	li	$t3, 10				#set speed
 	sw	$t3, VELOCITY			#change speed
 	j 	sabotage
   
 open_pen:
 	sw	$v0, UNLOCK_PLAYPEN		#unlock pen
-	lw	$s4, TIMER				#log time unlocked
+	lw	$s4, TIMER			#log time unlocked
 	j 	beginning
 	
 to_sabotage:
 	      # @param: Set target to enemy playpen.
-	      beq  $s5, 1, to_save
-	      move $t1, $s2
-	      move $t3, $s3
-	      lw      $t2, BOT_X                            #get bot x
+	beq     $s5, 1, to_save
+	move    $t1, $s2
+	move    $t3, $s3
+	lw      $t2, BOT_X                      #get bot x
         lw      $t4, BOT_Y                      #get bot y
         sub     $t1, $t1, $t2                   #x diff
         sub     $t3, $t3, $t4                   #y diff
-        bne     $t1, $0, move_to_sabotage    #check if at enemy pen x
-        bne     $t3, $0, move_to_sabotage    #check if at enemy pen y
+        bne     $t1, $0, move_to_sabotage       #check if at enemy pen x
+        bne     $t3, $0, move_to_sabotage       #check if at enemy pen y
         j       nsabotage
 
 move_to_sabotage:
-	      move $a0, $t1                           #arg0 = x diff
-        move $a1, $t3                           #arg1 = y diff
-        jal     sb_arctan                               #find angle
-        sw      $v0, ANGLE                              #set angle
-        li      $t1, 1                                  #absolute direction
+	move    $a0, $t1                        #arg0 = x diff
+        move    $a1, $t3                        #arg1 = y diff
+        jal     sb_arctan                       #find angle
+        sw      $v0, ANGLE                      #set angle
+        li      $t1, 1                          #absolute direction
         sw      $t1, ANGLE_CONTROL              #change angle control   
         li      $t3, 10                                 #set speed
         sw      $t3, VELOCITY                   #change speed
@@ -288,23 +282,23 @@ move_to_sabotage:
 	
 nsabotage:
 	# @param: unlock enemy playpen
-	lw $v0, UNLOCK_PLAYPEN
-	j beginning
+	lw      $v0, UNLOCK_PLAYPEN
+	j       beginning
 
 to_save:
 	move    $t1, $s2
         move    $t3, $s3
-        lw      $t2, BOT_X          #get bot x
-        lw      $t4, BOT_Y          #get bot y
-        sub     $t1, $t1, $t2       #x diff
-        sub     $t3, $t3, $t4       #y diff
-        bne     $t1, $0, move_to_save    #check if at pen x
-        bne     $t3, $0, move_to_save    #check if at pen y
+        lw      $t2, BOT_X          		#get bot x
+        lw      $t4, BOT_Y          		#get bot y
+        sub     $t1, $t1, $t2       		#x diff
+        sub     $t3, $t3, $t4       		#y diff
+        bne     $t1, $0, move_to_save    	#check if at pen x
+        bne     $t3, $0, move_to_save    	#check if at pen y
         j       save
 
 move_to_save:
-	move $a0, $t1                           #arg0 = x diff
-        move $a1, $t3                           #arg1 = y diff
+	move 	$a0, $t1                        #arg0 = x diff
+        move 	$a1, $t3                        #arg1 = y diff
         jal     sb_arctan                       #find angle
         sw      $v0, ANGLE                      #set angle
         li      $t1, 1                          #absolute direction
@@ -314,10 +308,10 @@ move_to_save:
         j       to_save                         #keep moving
 
 save:
-	sw $v0, LOCK_PLAYPEN			#lock pen
-	li $s5, 0				#emergency boolean
-	j to_sabotage
->>>>>>> master
+	sw 	$v0, LOCK_PLAYPEN		#lock pen
+	li 	$s5, 0				#emergency boolean
+	j 	to_sabotage
+
 #--------------------------------------------------------------------- Interrupt handlers	
 	
 .kdata				# interrupt handler data (separated just for readability)
@@ -384,7 +378,6 @@ bonk_interrupt:
       
 bonk_skip:                             #  do 
       sw      $a1, 0xffff0010($zero)   #  ??  
-
       j       interrupt_dispatch       # see if other interrupts are waiting
 
 timer_interrupt:
