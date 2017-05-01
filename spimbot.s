@@ -86,7 +86,7 @@ main:
 	sw	$t0, TIMER				# request timer interrupt in 50 cycles
 
 beginning:
-	beq	$s5, 1, to_save			#if unlock interrupt, then save pen
+	beq	$s8, 1, to_save			#if unlock interrupt, then save pen
 	lw	$t0, NUM_CARROTS		#get carrots
 	bge	$t0, 5, next			#only request a puzzle if carrots is less than 5
 	la	$t0, puzzle_data		#request a puzzle
