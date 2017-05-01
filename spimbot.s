@@ -59,6 +59,8 @@ turns: .word 1 0 -1 0
 
 .text
 main:
+	li $s8, 0 #emergency boolean
+
 	sub	$sp, $sp, 4		#allocate mem
 	lw	$t0, TIMER
 	sw	$t0, 0($sp)	#store time
@@ -78,6 +80,7 @@ main:
 	sw	$t0, TIMER				# request timer interrupt in 50 cycles
 
 beginning:
+	beq	$s8, 1, to_save			#if unlock interrupt, then save pen
 	lw	$t0, NUM_CARROTS		#get carrots
 	bge	$t0, 10, next			#only request a puzzle if carrots is less than 10
 	la	$t0, puzzle_data		#request a puzzle
@@ -211,7 +214,7 @@ give_bunnies:
 sabotage:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
-	lw	$t5, PLAYPEN_LOCATION	#load location
+	lw	$t5, PLAYPEN_OTHER_LOCATION	#load location
 	srl	$t1, $t5, 16			#get x loc
 	and	$t3, $t5, 0x0000ffff	#get y loc
 	sub	$t8, $t1, $t2			#x diff from enemy pen
@@ -230,8 +233,32 @@ sabotage:
 open_pen:
 	sw	$v0, UNLOCK_PLAYPEN		#unlock pen
 	lw	$t9, TIMER
-	sw	$t9, 0($sp)			#log time unlocked
+	sw	$t9, 0($sp)				#log time unlocked
 	j 	beginning
+
+to_save:
+	lw	$t5, PLAYPEN_LOCATION	#load location
+	srl	$t1, $t5, 16			#get x loc
+	and	$t3, $t5, 0x0000ffff	#get y loc
+	lw	$t2, BOT_X				#get bot x
+	lw	$t4, BOT_Y				#get bot y
+	sub	$t1, $t1, $t2			#x diff
+	sub	$t3, $t3, $t4			#y diff
+	bne	$t1, $0, move_to_save	#check if at pen x
+	bne	$t3, $0, move_to_save	#check if at pen y
+	sw 	$v0, LOCK_PLAYPEN
+	li	$s8, 0
+	j	beginning
+move_to_save:
+	move $a0, $t1				#arg0 = x diff
+	move $a1, $t3				#arg1 = y diff
+	jal	sb_arctan				#find angle
+	sw	$v0, ANGLE				#set angle
+	li	$t1, 1					#absolute direction
+	sw	$t1, ANGLE_CONTROL		#change angle control	
+	li	$t3, 10					#set speed
+	sw	$t3, VELOCITY			#change speed
+	j	to_save
 	
 #--------------------------------------------------------------------- Interrupt handlers	
 	
@@ -280,8 +307,7 @@ interrupt_dispatch:			# Interrupt:
 
 unlock_interrupt:
 	sw  	$a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
-	move	$t1, $s0
-	move	$t3, $s1
+	li $s8, 1 #emergency boolean
 
 	j 	interrupt_dispatch
 	
@@ -661,7 +687,7 @@ gsi_for:
 
 	mul	$t0, $s3, 4
 	add	$t0, $t0, $s1
-	lw	$t0, 4($t0)		# baskets->basket[i]
+	lw	$t0, 4($t0)			# baskets->basket[i]
 
 	lw	$a0, 16($t0)		# baskets->basket[i]->identity
 	lw	$a1, 12($t0)		# baskets->basket[i]->id_size
