@@ -282,7 +282,7 @@ move_to_save:
 
 save:
 	sw $v0, LOCK_PLAYPEN			#lock pen
-	li $s5, 0				#emergency boolean
+	li $s8, 0				#emergency boolean
 	j to_sabotage
 	li	$t1, 7					#deposit
 	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
@@ -361,7 +361,7 @@ interrupt_dispatch:			# Interrupt:
 unlock_interrupt:
 	sw  	$a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
 	
-	li 	$s5, 1 #emergency boolean
+	li 	$s8, 1 #emergency boolean
 
 	j 	interrupt_dispatch
 	
