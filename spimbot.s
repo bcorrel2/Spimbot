@@ -228,7 +228,7 @@ give_bunnies:
 	
 to_sabotage:
 	# @param: Set target to enemy playpen.
-	beq  $s5, 1, to_save
+	beq  $s8, 1, to_save
 	move $t1, $s2
 	move $t3, $s3
 	lw      $t2, BOT_X                      #get bot x
