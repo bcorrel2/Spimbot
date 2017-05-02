@@ -42,7 +42,7 @@ TIMER_ACK               = 0xffff006c
 BUNNY_MOVE_INT_MASK     = 0x400
 BUNNY_MOVE_ACK          = 0xffff0020
 PLAYPEN_UNLOCK_INT_MASK = 0x2000
-PLAYPEN_UNLOCK_ACK      = 0xffff005c
+PLAYPEN_UNLOCK_ACK      = 0xffff0028
 EX_CARRY_LIMIT_INT_MASK = 0x4000
 EX_CARRY_LIMIT_ACK      = 0xffff002c
 REQUEST_PUZZLE_INT_MASK = 0x800
@@ -127,7 +127,7 @@ next:
 	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after jal if necessary
 
 	lw	$t9, NUM_BUNNIES_CARRIED #get bunnies carried
-	bge	$t9, 7, deposit			#deposit bunnies in pen
+	bge	$t9, 6, deposit			#deposit bunnies in pen
 
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
@@ -137,8 +137,9 @@ next:
 	ble	$t8, 1000000, continue_bunnies	#don't sabotage if too soon
 
 	lw	$t5, PLAYPEN_OTHER_LOCATION	#load location
+	beq     $t5, 0xffffffff, continue_bunnies
 	srl	$t1, $t5, 16			#get x loc
-	and	$t3, $t5, 0x0000ffff	#get y loc
+	and	$t3, $t5, 0x0000ffff		#get y loc
 	sub	$t8, $t2, $t1			#x diff from enemy pen
 	sra	$t7, $t8, 31			#get signed bit
 	xor	$t8, $t8, $t7			#invert bits
@@ -238,7 +239,7 @@ move_to_pen:
 	j	deposit					#keep depositing
 
 give_bunnies:
-	li	$t1, 7					#deposit
+	li	$t1, 6					#deposit
 	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
 	sw 	$v0, LOCK_PLAYPEN
 	j	beginning
@@ -250,6 +251,7 @@ sabotage:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
 	lw	$t5, PLAYPEN_OTHER_LOCATION	#load location
+	beq     $t5, 0xffffffff, beginning
 	srl	$t1, $t5, 16			#get x loc
 	and	$t3, $t5, 0x0000ffff	#get y loc
 	sub	$t8, $t1, $t2			#x diff from enemy pen
@@ -293,7 +295,7 @@ save:
 	j 	save
 
 close_pen:
-	sw      $v0, UNLOCK_PLAYPEN             #unlock pen
+	sw      $v0, LOCK_PLAYPEN             #unlock pen
 	la      $t1, danger
         sw      $0, 0($t1)
 	j       beginning
@@ -329,7 +331,7 @@ go_home:
 	j beginning
 
 
-go_home_alt:
+go_home_ur_drunk:
 	lw      $t5, PLAYPEN_LOCATION   #load location
         srl     $t1, $t5, 16                    #get x loc
         and     $t3, $t5, 0x0000ffff    #get y loc
