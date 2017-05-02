@@ -55,44 +55,45 @@ bunnies_data: .space 484
 puzzle_data: .space 9804
 baskets_data: .space 44
 puzzlesolution:	.space 4
-puzzleexists: .space 4
+puzzleready: .space 4
+danger: .space 4
+bonked: .space 4
 turns: .word 1 0 -1 0
 
 .text
 main:
-	li $v1, 0 #emergency boolean
+
+#s0 = global interrupt 1
+#s1 = global interrupt 2
+#s2 = bunnies_data
 
 	sub	$sp, $sp, 4		#allocate mem
 	lw	$t0, TIMER
 	sw	$t0, 0($sp)	#store time
-	li	$s8, 0			#carrot flag false
-    
-	# enable interrupts
-	li	$t4, TIMER_MASK		# timer interrupt enable bit
-	or	$t4, $t4, BONK_MASK	# bonk interrupt bit
-	or	$t4, $t4, PLAYPEN_UNLOCK_INT_MASK	#playpen opened
-	or	$t4, $t4, REQUEST_PUZZLE_INT_MASK	#puzzle ready
-	or	$t4, $t4, 1				#global
+
+    # enable interrupts
+	li	    $t4, TIMER_MASK		# timer interrupt enable bit
+	or	    $t4, $t4, BONK_MASK	# bonk interrupt bit
+	or	    $t4, $t4, PLAYPEN_UNLOCK_INT_MASK	#playpen opened
+	or	    $t4, $t4, REQUEST_PUZZLE_INT_MASK	#puzzle ready
+	or	    $t4, $t4, 1				#global
 	mtc0	$t4, $12			# set interrupt mask (Status register)
 
 	# request timer interrupt
-	lw	$t0, TIMER				# read current time
-	add	$t0, $t0, 50			# add 50 to current time
-	sw	$t0, TIMER				# request timer interrupt in 50 cycles
+	lw	    $t0, TIMER				# read current time
+	add	    $t0, $t0, 50			# add 50 to current time
+	sw	    $t0, TIMER				# request timer interrupt in 50 cycles
 
-#	j beginning
 
-#test function for puzzles, to use comment out line above
-getpuzz:
 	la      $t0, puzzle_data
 	sw      $t0, REQUEST_PUZZLE
-puzz:
-	beq     $s8, 1, dopuzz
-	la      $s8, puzzleexists
-    	lw      $s8, 0($s8)
 
-	j puzz
-	
+beginning:
+	li      $t0, 10                         #set speed
+        sw      $t0, VELOCITY                   #change speed
+	la $t0, puzzleready
+        lw $t0, 0($t0)
+	bne $t0, 1, oldb
 
 dopuzz:
 	li	$a0, 10					#max baskets = 10
@@ -105,19 +106,22 @@ dopuzz:
 	sw	$v0, puzzlesolution		#store to mem
 	la	$v0, puzzlesolution
 	sw	$v0, SUBMIT_SOLUTION	#submit solution
-	la	$t0, bunnies_data		#retrieve bunny data
-
-	j getpuzz
+	la $t1, puzzleready
+	sw $0, 0($t1)
+	la $t1, puzzle_data
+	sw $t1, REQUEST_PUZZLE
 	
-
-beginning:
-	beq	$s8, 1, to_save			#if unlock interrupt, then save pen
+oldb:
+	la $t0, danger
+        lw $t0, 0($t0)
+	beq	$t0, 1, save			#if unlock interrupt, then save pen
 	lw	$t0, NUM_CARROTS		#get carrots
-	bge	$t0, 10, next			#only request a puzzle if carrots is less than 10
 
-	beq     $s8, 1, next
-	la	$t0, puzzle_data		#request a puzzle
-	sw	$t0, REQUEST_PUZZLE		# ^^
+	la $t0, bonked
+        lw $t0, 0($t0)
+        beq $t0, 1, go_home
+
+
 next:	
     la	$t0, bunnies_data
 	sw	$t0, SEARCH_BUNNIES		#need to retrieve this after jal if necessary
@@ -125,23 +129,6 @@ next:
 	lw	$t9, NUM_BUNNIES_CARRIED #get bunnies carried
 	bge	$t9, 7, deposit			#deposit bunnies in pen
 
-	beq	$s8, 1, moving		#skip puzzle if not ready
-	j skip_puzzle
-
-moving:
-	li	$a0, 10					#max baskets = 10
-	la	$a1, puzzle_data
-	lw	$a1, 9800($a1)			#get k
-	la	$a2, puzzle_data		#root node
-	la	$a3, baskets_data
-	sw	$0, 0($a3)				#store 0 for num_found
-	jal	search_carrot
-	sw	$v0, puzzlesolution		#store to mem
-	la	$v0, puzzlesolution
-	sw	$v0, SUBMIT_SOLUTION	#submit solution
-	la	$t0, bunnies_data		#retrieve bunny data
-	
-skip_puzzle:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
 	lw	$t8, TIMER				#current time
@@ -172,6 +159,7 @@ continue_bunnies:
 	add	$t1, $t0, 4				#bunny x addr
 	add	$t3, $t0, 8				#bunny y addr
 	li	$t0, 0					#curr bunny offset
+
 closest:
 	bge	$t0, 20, start			#start going to bunny
 	lw	$t5, 0($t1)				#bunny x
@@ -190,11 +178,13 @@ closest:
 	bge	$v0, $t9, skip			#if euc dist is greater than best, skip it
 	move $t9, $v0				#update best value
 	move $t8, $t0				#bunny offset
+
 skip:
 	add	$t0, $t0, 1				#increment bunny offset
 	add	$t1, $t1, 16			#next bunny x
 	add	$t3, $t3, 16			#next bunny y
 	j closest					#keep searching
+
 start:
 	la	$t0, bunnies_data		#retrieve bunny address
 	mul	$t5, $t8, 16			#bunny offset
@@ -206,6 +196,7 @@ start:
 	bne	$t1, $0, control		#go to control if x coords are diff
 	bne	$t3, $0, control		#same for y
 	j	catch					#catch the bunny
+
 control:
 	move $a0, $t1				#arg0 = x diff
 	move $a1, $t3				#arg1 = y diff
@@ -216,11 +207,13 @@ control:
 	li	$t3, 10					#set speed
 	sw	$t3, VELOCITY			#change speed
 	la	$t0, bunnies_data		#retrieve bunny address
-	j	moving					#continue until bunny found
+	j	beginning				#continue until bunny found
+
 catch:		
 	li	$t5, 0					#gonna catch a bunny
 	sw	$t5, CATCH_BUNNY		#call catch bunny
 	j	beginning
+
 deposit:
 	lw	$t5, PLAYPEN_LOCATION	#load location
 	srl	$t1, $t5, 16			#get x loc
@@ -232,6 +225,7 @@ deposit:
 	bne	$t1, $0, move_to_pen	#check if at pen x
 	bne	$t3, $0, move_to_pen	#check if at pen y
 	j	give_bunnies
+
 move_to_pen:
 	move $a0, $t1				#arg0 = x diff
 	move $a1, $t3				#arg1 = y diff
@@ -242,13 +236,17 @@ move_to_pen:
 	li	$t3, 10					#set speed
 	sw	$t3, VELOCITY			#change speed
 	j	deposit					#keep depositing
+
 give_bunnies:
 	li	$t1, 7					#deposit
 	sw	$t1, PUT_BUNNIES_IN_PLAYPEN	#make a deposit at the bunny bank
 	sw 	$v0, LOCK_PLAYPEN
 	j	beginning
+
 sabotage:
-	beq	$v1, 1, to_save			#check for enemy sabotage
+	la      $t0, danger
+        lw      $t0, 0($t0)
+	beq	$t0, 1, save			#if unlock interrupt, then save pen
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
 	lw	$t5, PLAYPEN_OTHER_LOCATION	#load location
@@ -258,8 +256,8 @@ sabotage:
 	sub	$t9, $t3, $t4			#y diff from enemy pen
 	beq	$t8, $0, open_pen		#x are the same
 	beq	$t9, $0, open_pen		#y are the same
-	move $a0, $t8				#x diff
-	move $a1, $t9				#y diff
+	move    $a0, $t8				#x diff
+	move    $a1, $t9				#y diff
 	jal	sb_arctan				#get angle
 	sw	$v0, ANGLE				#set angle
 	li	$t1, 1					#absolute direction
@@ -267,61 +265,136 @@ sabotage:
 	li	$t3, 10					#set speed
 	sw	$t3, VELOCITY			#change speed
 	j 	sabotage
+
 open_pen:
 	sw	$v0, UNLOCK_PLAYPEN		#unlock pen
 	lw	$t9, TIMER
 	sw	$t9, 0($sp)				#log time unlocked
 	j 	beginning
 
-to_save:
-	lw	$t5, PLAYPEN_LOCATION	#load location
-	srl	$t1, $t5, 16			#get x loc
-	and	$t3, $t5, 0x0000ffff	#get y loc
+save:
 	lw	$t2, BOT_X				#get bot x
 	lw	$t4, BOT_Y				#get bot y
-	sub	$t1, $t1, $t2			#x diff
-	sub	$t3, $t3, $t4			#y diff
-	bne	$t1, $0, move_to_save	#check if at pen x
-	bne	$t3, $0, move_to_save	#check if at pen y
-	sw 	$v0, LOCK_PLAYPEN
-	li	$v1, 0
-	j	beginning
-move_to_save:
-	move $a0, $t1				#arg0 = x diff
-	move $a1, $t3				#arg1 = y diff
-	jal	sb_arctan				#find angle
+	lw	$t5, PLAYPEN_LOCATION	#load location
+	srl	$t1, $t5, 16			#get x loc
+	and	$t3, $t5, 0x0000ffff		#get y loc
+	sub	$t8, $t1, $t2			#x diff from pen
+	sub	$t9, $t3, $t4			#y diff from pen
+	beq	$t8, $0, close_pen		#x are the same
+	beq	$t9, $0, close_pen		#y are the same
+	move    $a0, $t8				#x diff
+	move    $a1, $t9				#y diff
+	jal	sb_arctan				#get angle
 	sw	$v0, ANGLE				#set angle
 	li	$t1, 1					#absolute direction
 	sw	$t1, ANGLE_CONTROL		#change angle control	
 	li	$t3, 10					#set speed
 	sw	$t3, VELOCITY			#change speed
-	j	to_save
-	
-#--------------------------------------------------------------------- Interrupt handlers	
-	
+	j 	save
+
+close_pen:
+	sw      $v0, UNLOCK_PLAYPEN             #unlock pen
+	la      $t1, danger
+        sw      $0, 0($t1)
+	j       beginning
+
+#to_save:
+#	lw	$t5, PLAYPEN_LOCATION	#load location
+#	srl	$t1, $t5, 16			#get x loc
+#	and	$t3, $t5, 0x0000ffff	#get y loc
+#	lw	$t2, BOT_X				#get bot x
+#	lw	$t4, BOT_Y				#get bot y
+#	sub	$t1, $t1, $t2			#x diff
+#	sub	$t3, $t3, $t4			#y diff
+#	bne	$t1, $0, move_to_save	#check if at pen x
+#	bne	$t3, $0, move_to_save	#check if at pen y
+#	sw 	$v0, LOCK_PLAYPEN
+#	li	$v1, 0
+#	j	beginning
+
+#move_to_save:
+#	move $a0, $t1				#arg0 = x diff
+#	move $a1, $t3				#arg1 = y diff
+#	jal	sb_arctan				#find angle
+#	sw	$v0, ANGLE				#set angle
+#	li	$t1, 1					#absolute direction
+#	sw	$t1, ANGLE_CONTROL		#change angle control	
+#	li	$t3, 10					#set speed
+#	sw	$t3, VELOCITY			#change speed
+#	j	to_save
+
+go_home:
+	la      $t1, bonked
+        sw      $0, 0($t1)
+	j beginning
+
+
+go_home_alt:
+	lw      $t5, PLAYPEN_LOCATION   #load location
+        srl     $t1, $t5, 16                    #get x loc
+        and     $t3, $t5, 0x0000ffff    #get y loc
+        lw      $t2, BOT_X                              #get bot x
+        lw      $t4, BOT_Y                              #get bot y
+        sub     $t1, $t1, $t2                   #x diff
+        sub     $t3, $t3, $t4                   #y diff
+        bne     $t1, $0, move_to_home   #check if at pen x
+        bne     $t3, $0, move_to_home   #check if at pen y
+        sw      $v0, LOCK_PLAYPEN
+        la 	$t1, bonked
+        sw 	$0, 0($t1)
+	j beginning
+
+move_to_home:
+        move $a0, $t1                           #arg0 = x diff
+        move $a1, $t3                           #arg1 = y diff
+        jal     sb_arctan                               #find angle
+        sw      $v0, ANGLE                              #set angle
+        li      $t1, 1                                  #absolute direction
+        sw      $t1, ANGLE_CONTROL              #change angle control   
+        li      $t3, 10                                 #set speed
+        sw      $t3, VELOCITY                   #change speed
+        j       go_home
+
+
+	end:
+	# note that we infinite loop to avoid stopping the simulation early
+	j	start
+
+
+lw	$ra, 0($sp)
+	lw	$s0, 4($sp)
+	lw	$s1, 8($sp)
+	lw	$s2, 12($sp)
+	lw	$s3, 16($sp)
+	lw	$s4, 20($sp)
+	lw	$s5, 24($sp)
+	lw	$s6, 28($sp)
+	lw	$s7, 32($sp)
+	lw	$s7, 36($sp)
+	add	$sp, $sp, 40
+
+#-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
+
 .kdata				# interrupt handler data (separated just for readability)
-chunkIH:	.space 8	# space for two registers
+chunkIH:	.space 16	# space for two registers
 non_intrpt_str:	.asciiz "Non-interrupt exception\n"
 unhandled_str:	.asciiz "Unhandled interrupt type\n"
-
 
 .ktext 0x80000180
 interrupt_handler:
 .set noat
-	move	$k1, $at		# Save $at                               
+	move	$k1, $at		# Save $at
 .set at
 	la	$k0, chunkIH
-	sw	$a0, 0($k0)		# Get some free registers                  
-	sw	$a1, 4($k0)		# by storing them to a global variable     
-	sw	$s8, 8($k0)
-	sw	$s1, 12($k0)
-	
-	
+	sw	$a0, 0($k0)		# Get some free registers
+	sw	$a1, 4($k0)		# by storing them to a global variable
+	sw	$s0, 8($k0)		# by storing them to a global variable
+	sw	$s1, 12($k0)		# by storing them to a global variable
 
-	mfc0	$k0, $13		# Get Cause register                       
-	srl	$a0, $k0, 2                
-	and	$a0, $a0, 0xf		# ExcCode field                            
-	bne	$a0, 0, non_intrpt         
+	mfc0	$k0, $13		# Get Cause register
+	srl	$a0, $k0, 2
+	and	$a0, $a0, 0xf		# ExcCode field
+	bne	$a0, 0, non_intrpt
 
 interrupt_dispatch:			# Interrupt:                             
 	mfc0	$k0, $13		# Get Cause register, again                 
@@ -346,32 +419,41 @@ interrupt_dispatch:			# Interrupt:
 	syscall 
 	j	done
 
-unlock_interrupt:
-	sw  	$a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
-	li 	$v1, 1 #emergency boolean
-
-	j 	interrupt_dispatch
-	
-puzzle_interrupt:
-	sw	$a1, REQUEST_PUZZLE_ACK
-	li	$s8, 1							#flag true
-	la      $v1, puzzleexists
-	sw      $s8, 0($v1)
-	j	interrupt_dispatch
-
 bonk_interrupt:
       sw      $a1, 0xffff0060($zero)   # acknowledge interrupt
 
       li      $a1, 10                  #  ??
       lw      $a0, 0xffff001c($zero)   # what
+
+      li      $s0, 0                                 #set speed
+      sw      $s0, VELOCITY                   #change speed
+
+      li $s0, 1
+      la $s1, bonked
+      sw $s0, 0($s1)
+	
       and     $a0, $a0, 1              # does
       bne     $a0, $zero, bonk_skip    # this 
       li      $a1, -10                 # code
       
 bonk_skip:                             #  do 
       sw      $a1, 0xffff0010($zero)   #  ??  
-
       j       interrupt_dispatch       # see if other interrupts are waiting
+
+unlock_interrupt:
+      	sw  	$a1, PLAYPEN_UNLOCK_ACK  # acknowledge interrupt
+     	li $s0, 1
+	    la $s1, danger
+		sw $s0, 0($s1)
+        j  interrupt_dispatch       # see if other interrupts are waiting
+
+
+puzzle_interrupt:
+	sw	$a1, REQUEST_PUZZLE_ACK
+	li $s0, 1
+    la $s1, puzzleready
+	sw $s0, 0($s1)
+    j       interrupt_dispatch       # see if other interrupts are waiting
 
 timer_interrupt:
 	sw	$a1, TIMER_ACK		# acknowledge interrupt
@@ -386,6 +468,7 @@ timer_interrupt:
 
 	j	interrupt_dispatch	# see if other interrupts are waiting
       
+
 non_intrpt:				# was some non-interrupt
 	li	$v0, PRINT_STRING
 	la	$a0, non_intrpt_str
@@ -396,13 +479,14 @@ done:
 	la	$k0, chunkIH
 	lw	$a0, 0($k0)		# Restore saved registers
 	lw	$a1, 4($k0)
-	lw	$s8, 8($k0)
-	lw	$v1, 12($k0)
-
+	lw	$s0, 8($k0)
+	lw	$s1, 12($k0)
 .set noat
 	move	$at, $k1		# Restore $at
-.set at 
+.set at
 	eret
+
+#-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
 
 .data
 three:	.float	3.0
