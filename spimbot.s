@@ -89,6 +89,9 @@ main:
 	sw      $t0, REQUEST_PUZZLE
 
 beginning:
+	la $t0, danger
+        lw $t0, 0($t0)
+	beq	$t0, 1, save			#if unlock interrupt, then save pen
 	li      $t0, 10                         #set speed
         sw      $t0, VELOCITY                   #change speed
 	la $t0, puzzleready
@@ -162,6 +165,9 @@ continue_bunnies:
 	li	$t0, 0					#curr bunny offset
 
 closest:
+	la $t5, danger
+        lw $t5, 0($t5)
+	beq	$t5, 1, save			#if unlock interrupt, then save pen
 	bge	$t0, 20, start			#start going to bunny
 	lw	$t5, 0($t1)				#bunny x
 	lw	$t6, 0($t3)				#bunny y
@@ -187,6 +193,9 @@ skip:
 	j closest					#keep searching
 
 start:
+	la $t5, danger
+        lw $t5, 0($t5)
+	beq	$t5, 1, save			#if unlock interrupt, then save pen
 	la	$t0, bunnies_data		#retrieve bunny address
 	mul	$t5, $t8, 16			#bunny offset
 	add	$t5, $t5, $t0			#bunny addr
@@ -360,7 +369,7 @@ move_to_home:
 
 	end:
 	# note that we infinite loop to avoid stopping the simulation early
-	j 	beginning
+	j	start
 
 
 lw	$ra, 0($sp)
